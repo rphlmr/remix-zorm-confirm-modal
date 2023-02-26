@@ -1,7 +1,7 @@
 import { Dialog, Transition } from "@headlessui/react";
-import type { FetcherWithComponents } from "@remix-run/react";
+import { FetcherWithComponents, useActionData } from "@remix-run/react";
 import { useFetcher } from "@remix-run/react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { parseFormAny, useZorm } from "react-zorm";
 import { twMerge } from "tailwind-merge";
 import { z } from "zod";
@@ -27,12 +27,14 @@ export async function action({ request }: ActionArgs) {
 
   console.log(result);
 
-  return json({ ok: true });
+  return json({ ok: true, createdAt: new Date().toISOString() });
 }
 
 export default function Index() {
   const zo = useZorm("FormSchema", FormSchema);
   const formFetcher = useFetcher();
+  // a map of zo.fields that have been touched, in state
+  const touched = useRef(new Set());
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.4" }}>
@@ -44,17 +46,33 @@ export default function Index() {
       >
         <label>
           Name
-          <input className="bg-gray-200 ml-2" name={zo.fields.name()} />
-          {zo.errors.name()?.message && (
-            <span>{zo.errors.name()?.message}</span>
-          )}
+          <input
+            className="bg-gray-200 ml-2"
+            name={zo.fields.name()}
+            onChange={() => {
+              touched.current.add(zo.fields.name());
+              zo.validate();
+            }}
+          />
+          {touched.current.has(zo.fields.name()) &&
+            zo.errors.name()?.message && (
+              <span>{zo.errors.name()?.message}</span>
+            )}
         </label>
         <label>
           Email
-          <input className="bg-gray-200 ml-2" name={zo.fields.email()} />
-          {zo.errors.email()?.message && (
-            <span>{zo.errors.email()?.message}</span>
-          )}
+          <input
+            className="bg-gray-200 ml-2"
+            name={zo.fields.email()}
+            onChange={() => {
+              touched.current.add(zo.fields.email());
+              zo.validate();
+            }}
+          />
+          {touched.current.has(zo.fields.email()) &&
+            zo.errors.email()?.message && (
+              <span>{zo.errors.email()?.message}</span>
+            )}
         </label>
         <ConfirmDialog zorm={zo} formFetcher={formFetcher} />
       </formFetcher.Form>
@@ -71,6 +89,7 @@ function ConfirmDialog({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [data, setData] = useState<z.infer<typeof FormSchema>>();
+  const [disabled, setDisabled] = useState(true);
 
   const isPending =
     formFetcher.state !== "idle" && formFetcher.submission?.method === "POST";
@@ -94,19 +113,26 @@ function ConfirmDialog({
   useEffect(() => {
     if (formFetcher.type === "done" && formFetcher.data.ok) {
       zorm.form?.reset();
+      setDisabled(true);
       closeModal();
     }
   }, [formFetcher, zorm.form]);
+
+  useEffect(() => {
+    setDisabled(!zorm.validation?.success);
+  }, [zorm.validation?.success]);
 
   return (
     <>
       <>
         <div>
           <button
+            disabled={disabled}
             type="button"
             onClick={openModal}
             className={twMerge(
-              "rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-opacity-80"
+              "rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-opacity-80",
+              disabled && "bg-gray-500 cursor-not-allowed"
             )}
           >
             Submit
@@ -114,7 +140,15 @@ function ConfirmDialog({
         </div>
 
         <Transition appear show={isOpen} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={closeModal}>
+          <Dialog
+            as="div"
+            className="relative z-10"
+            onClose={() => {
+              if (!isPending) {
+                closeModal();
+              }
+            }}
+          >
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -155,6 +189,7 @@ function ConfirmDialog({
 
                     <div className="mt-4 space-x-2">
                       <button
+                        disabled={isPending}
                         type="button"
                         className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200"
                         onClick={closeModal}
