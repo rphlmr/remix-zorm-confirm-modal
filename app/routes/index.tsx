@@ -70,7 +70,7 @@ function ConfirmDialog({
   formFetcher: FetcherWithComponents<any>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [data, setData] = useState({});
+  const [data, setData] = useState<z.infer<typeof FormSchema>>();
 
   const isPending =
     formFetcher.state !== "idle" && formFetcher.submission?.method === "POST";
@@ -84,7 +84,7 @@ function ConfirmDialog({
 
     // if validation is successful, open modal and set data (not mandatory, depends on your use case)
     if (validation.success) {
-      setData(validation.data);
+      setData(validation.data as unknown as z.infer<typeof FormSchema>); // this is a hack, because data is not a schema ...
       setIsOpen(true);
     }
   }
@@ -149,7 +149,8 @@ function ConfirmDialog({
                       <p className="text-sm text-gray-500">
                         Your are about to submit the form : <br />
                       </p>
-                      <pre>{JSON.stringify(data)}</pre>
+                      <p>{data?.name}</p>
+                      <p>{data?.email}</p>
                     </div>
 
                     <div className="mt-4 space-x-2">
